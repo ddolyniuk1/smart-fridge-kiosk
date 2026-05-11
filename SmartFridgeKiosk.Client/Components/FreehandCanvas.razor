@@ -1,0 +1,166 @@
+@using Microsoft.JSInterop
+@inject IJSRuntime JsRuntime
+@implements IAsyncDisposable
+
+<div class="freehand-canvas-container" style="@ContainerStyle">
+    <canvas id="@_canvasId"
+            style="width: 100%; height: 100%; display: block; cursor: crosshair; border-radius: 4px;">
+    </canvas>
+</div>
+
+@code {
+    private readonly string _canvasId = $"freehand-{Guid.NewGuid():N}";
+    private DotNetObjectReference<FreehandCanvas>? _dotnetRef;
+    private bool _initialized;
+
+    /// <summary>
+    /// Stroke color (CSS color string).
+    /// </summary>
+    [Parameter] public string Color { get; set; } = "#1a1a2e";
+
+    /// <summary>
+    /// Background color of the canvas.
+    /// </summary>
+    [Parameter] public string BackgroundColor { get; set; } = "#ffffff";
+
+    /// <summary>
+    /// Base stroke size in pixels. Acts as the maximum width.
+    /// For a pen feel: 4–8. For a marker feel: 12–24.
+    /// </summary>
+    [Parameter] public double Size { get; set; } = 8;
+
+    /// <summary>
+    /// How much the stroke thins based on pressure/velocity (0–1).
+    /// 0 = uniform width. 0.5 = natural pen. 1 = extreme variation.
+    /// </summary>
+    [Parameter] public double Thinning { get; set; } = 0.5;
+
+    /// <summary>
+    /// Smoothing factor for stroke rendering (0–1).
+    /// </summary>
+    [Parameter] public double Smoothing { get; set; } = 0.5;
+
+    /// <summary>
+    /// Streamline factor - how much to simplify the input (0–1).
+    /// </summary>
+    [Parameter] public double Streamline { get; set; } = 0.5;
+
+    /// <summary>
+    /// Whether to simulate pressure from mouse velocity.
+    /// Automatically disabled when a pen/stylus is detected.
+    /// </summary>
+    [Parameter] public bool SimulatePressure { get; set; } = true;
+
+    /// <summary>
+    /// CSS style applied to the outer container div.
+    /// </summary>
+    [Parameter] public string ContainerStyle { get; set; } = "width: 100%; height: 300px;";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotnetRef = DotNetObjectReference.Create(this);
+
+            await JsRuntime.InvokeVoidAsync("FreehandCanvas.init", _canvasId, _dotnetRef, new
+            {
+                size = Size,
+                thinning = Thinning,
+                smoothing = Smoothing,
+                streamline = Streamline,
+                simulatePressure = SimulatePressure,
+                color = Color,
+                backgroundColor = BackgroundColor,
+            });
+
+            _initialized = true;
+        }
+    }
+
+    /// <summary>
+    /// Clear all strokes from the canvas.
+    /// </summary>
+    public async Task ClearAsync()
+    {
+        if (_initialized)
+            await JsRuntime.InvokeVoidAsync("FreehandCanvas.clear", _canvasId);
+    }
+
+    /// <summary>
+    /// Undo the last stroke.
+    /// </summary>
+    public async Task UndoAsync()
+    {
+        if (_initialized)
+            await JsRuntime.InvokeVoidAsync("FreehandCanvas.undo", _canvasId);
+    }
+
+    /// <summary>
+    /// Set the stroke color.
+    /// </summary>
+    public async Task SetColorAsync(string color)
+    {
+        if (_initialized)
+            await JsRuntime.InvokeVoidAsync("FreehandCanvas.setColor", _canvasId, color);
+    }
+
+    /// <summary>
+    /// Set the stroke size.
+    /// </summary>
+    public async Task SetSizeAsync(double size)
+    {
+        if (_initialized)
+            await JsRuntime.InvokeVoidAsync("FreehandCanvas.setSize", _canvasId, size);
+    }
+
+    /// <summary>
+    /// Check if the canvas has any strokes.
+    /// </summary>
+    public async Task<bool> HasStrokesAsync()
+    {
+        if (!_initialized) return false;
+        return await JsRuntime.InvokeAsync<bool>("FreehandCanvas.hasStrokes", _canvasId);
+    }
+
+    /// <summary>
+    /// Export the canvas as a PNG base64 string (without data URI prefix).
+    /// </summary>
+    public async Task<string?> ExportToPngBase64Async()
+    {
+        if (!_initialized) return null;
+        return await JsRuntime.InvokeAsync<string?>("FreehandCanvas.exportToPngBase64", _canvasId);
+    }
+
+    /// <summary>
+    /// Export the canvas as a PNG byte array. 
+    /// </summary>
+    public async Task<byte[]?> ExportToPngBytesAsync()
+    {
+        var base64 = await ExportToPngBase64Async();
+        if (string.IsNullOrEmpty(base64)) return null;
+        return Convert.FromBase64String(base64);
+    }
+
+    /// <summary>
+    /// Force a canvas resize (call after layout changes).
+    /// </summary>
+    public async Task ResizeAsync()
+    {
+        if (_initialized)
+            await JsRuntime.InvokeVoidAsync("FreehandCanvas.resize", _canvasId);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_initialized)
+        {
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("FreehandCanvas.dispose", _canvasId);
+            }
+            catch { /* Component may already be gone */ }
+        }
+
+        _dotnetRef?.Dispose();
+    }
+}

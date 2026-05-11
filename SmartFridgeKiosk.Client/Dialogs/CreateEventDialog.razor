@@ -1,0 +1,261 @@
+@using MudBlazor
+@using SmartFridgeKiosk.Client.Components
+@inject IDialogService DialogService
+@inject IJSRuntime JsRuntime
+
+<MudDialog>
+    <TitleContent>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@Icons.Material.Filled.Event" />
+            <MudText Typo="Typo.h6">New Event</MudText>
+        </div>
+    </TitleContent>
+
+    <DialogContent>
+        <div class="d-flex flex-column gap-3" style="min-width: 400px;">
+
+            <MudTextField @bind-Value="_title"
+                          Label="Event Title"
+                          Variant="Variant.Outlined"
+                          Required="true"
+                          RequiredError="Title is required" />
+
+            <MudToggleGroup T="InputMode"
+                            @bind-Value="_inputMode"
+                            Color="Color.Primary"
+                            Style="align-self: flex-start;"
+                            Outline="true"
+                            Rounded="true"
+                            CheckMark="true"
+                            SelectedChanged="OnInputModeChanged">
+                <MudToggleItem T="InputMode" Value="InputMode.Text">
+                    <div class="d-flex align-center gap-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Keyboard" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">Text</MudText>
+                    </div>
+                </MudToggleItem>
+                <MudToggleItem T="InputMode" Value="InputMode.Handwriting">
+                    <div class="d-flex align-center gap-1">
+                        <MudIcon Icon="@Icons.Material.Filled.Draw" Size="Size.Small" />
+                        <MudText Typo="Typo.body2">Handwriting</MudText>
+                    </div>
+                </MudToggleItem>
+            </MudToggleGroup>
+
+            @if (_inputMode == InputMode.Text)
+            {
+                <MudTextField @bind-Value="_description"
+                              Label="Description"
+                              Variant="Variant.Outlined"
+                              Lines="5"
+                              AutoGrow="true"
+                              MaxLines="10"
+                              Placeholder="Type your event details..." />
+            }
+
+            @if (_inputMode == InputMode.Handwriting)
+            {
+                <div>
+                    <MudText Typo="Typo.body2" Class="mb-1" Style="color: var(--mud-palette-text-secondary);">
+                        Draw your notes below
+                    </MudText>
+
+                    <MudPaper Outlined="true" Style="overflow: hidden; border-radius: 4px;">
+                        <FreehandCanvas @ref="_canvas"
+                                        Size="@_strokeSize"
+                                        Thinning="0.5"
+                                        Smoothing="0.5"
+                                        Color="@_strokeColor"
+                                        ContainerStyle="width: 100%; height: 260px;" />
+                    </MudPaper>
+ 
+                    <div class="d-flex align-center gap-2 mt-2">
+ 
+                        <MudTooltip Text="Stroke size">
+                            <MudToggleGroup T="double"
+                                            @bind-Value="_strokeSize"
+                                            Color="Color.Primary"
+                                            Outline="true"
+                                            Rounded="true"
+                                            Dense="true"
+                                            SelectedChanged="OnStrokeSizeChanged">
+                                <MudToggleItem T="double" Value="4">
+                                    <MudIcon Icon="@Icons.Material.Filled.Create" Size="Size.Small" />
+                                </MudToggleItem>
+                                <MudToggleItem T="double" Value="12">
+                                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                                </MudToggleItem>
+                                <MudToggleItem T="double" Value="24">
+                                    <MudIcon Icon="@Icons.Material.Filled.Brush" Size="Size.Small" />
+                                </MudToggleItem>
+                            </MudToggleGroup>
+                        </MudTooltip>
+
+                        @foreach (var color in _colorSwatches)
+                        {
+                            <MudIconButton Size="Size.Small"
+                                           Style="@GetSwatchStyle(color)"
+                                           OnClick="@(() => SetColor(color))" />
+                        }
+
+                        <MudSpacer />
+
+                        <MudTooltip Text="Undo last stroke">
+                            <MudIconButton Icon="@Icons.Material.Filled.Undo"
+                                           Size="Size.Small"
+                                           OnClick="Undo" />
+                        </MudTooltip>
+
+                        <MudTooltip Text="Clear all">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           OnClick="Clear" />
+                        </MudTooltip>
+                    </div>
+                </div>
+            }
+        </div>
+    </DialogContent>
+
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="Submit"
+                   Disabled="_isSubmitting">
+            @if (_isSubmitting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create Event
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance? MudDialog { get; set; }
+ 
+    [Parameter] public InputMode InitialInputMode { get; set; } = InputMode.Text;
+
+    private FreehandCanvas? _canvas;
+    private InputMode _inputMode;
+    private string _title = string.Empty;
+    private string _description = string.Empty;
+    private double _strokeSize = 8;
+    private string _strokeColor = "#1a1a2e";
+    private bool _isSubmitting;
+
+    private readonly string[] _colorSwatches =
+    [
+        "#1a1a2e",  // near-black
+        "#e63946",  // red
+        "#457b9d",  // blue
+        "#2a9d8f",  // teal
+        "#e9c46a" // gold
+    ];
+
+    protected override void OnInitialized()
+    {
+        _inputMode = InitialInputMode;
+    }
+
+    private async Task OnInputModeChanged(InputMode mode)
+    {
+        _inputMode = mode;
+        if (mode == InputMode.Handwriting)
+        {
+            await Task.Delay(50);
+            if (_canvas is not null)
+                await _canvas.ResizeAsync();
+        }
+    }
+
+    private async Task OnStrokeSizeChanged(double size)
+    {
+        _strokeSize = size;
+        if (_canvas is not null)
+            await _canvas.SetSizeAsync(size);
+    }
+
+    private async Task SetColor(string color)
+    {
+        _strokeColor = color;
+        if (_canvas is not null)
+            await _canvas.SetColorAsync(color);
+    }
+
+    private string GetSwatchStyle(string color)
+    {
+        var selected = color == _strokeColor;
+        return $"background-color: {color}; width: 24px; height: 24px; min-width: 24px; border-radius: 50%; "
+             + $"border: 2px solid {(selected ? "var(--mud-palette-primary)" : "transparent")}; "
+             + $"box-shadow: {(selected ? "0 0 0 2px var(--mud-palette-background), 0 0 0 4px var(--mud-palette-primary)" : "none")};";
+    }
+
+    private async Task Undo()
+    {
+        if (_canvas is not null)
+            await _canvas.UndoAsync();
+    }
+
+    private async Task Clear()
+    {
+        if (_canvas is not null)
+            await _canvas.ClearAsync();
+    }
+
+    private void Cancel() => MudDialog?.Cancel();
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_title)) return;
+
+        _isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = new CreateEventResult
+            {
+                Title = _title,
+                InputMode = _inputMode,
+            };
+
+            if (_inputMode == InputMode.Text)
+            {
+                result.TextContent = _description;
+            }
+            else if (_canvas is not null && await _canvas.HasStrokesAsync())
+            {
+                result.HandwritingImageBytes = await _canvas.ExportToPngBytesAsync();
+                result.HandwritingImageBase64 = await _canvas.ExportToPngBase64Async();
+            }
+
+            MudDialog?.Close(DialogResult.Ok(result));
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    public enum InputMode
+    {
+        Text,
+        Handwriting,
+    }
+
+    public class CreateEventResult
+    {
+        public string Title { get; set; } = string.Empty;
+        public InputMode InputMode { get; set; }
+
+        public string? TextContent { get; set; }
+
+        public byte[]? HandwritingImageBytes { get; set; }
+
+        public string? HandwritingImageBase64 { get; set; }
+    }
+}

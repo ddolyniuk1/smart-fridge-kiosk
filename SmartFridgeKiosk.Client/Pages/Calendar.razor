@@ -1,0 +1,48 @@
+@page "/Calendar"
+@using SmartFridgeKiosk.Client.Dialogs
+@inject IDialogService DialogService
+
+<h3>Calendar</h3>
+
+<MudButton @onclick="OpenCreateEventDialog" StartIcon="@Icons.Material.Filled.EditCalendar">New Event</MudButton>
+
+<MudCalendar @bind-CurrentDay="CurrentDay" CellClicked="CellClicked" Outlined="true"  EnableDragItems="true" T="CalendarItem"/>
+
+@code {
+
+    private DateTime CurrentDay
+    {
+        get;
+        set;
+    }
+    
+    private async Task OpenCreateEventDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            { nameof(CreateEventDialog.InitialInputMode), CreateEventDialog.InputMode.Handwriting }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateEventDialog>("New Event", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is null || result.Canceled) return;
+
+        var data = (CreateEventDialog.CreateEventResult)result.Data!;
+
+    }
+
+    private void CellClicked(DateTime obj)
+    {
+        CurrentDay = obj;
+        InvokeAsync(StateHasChanged);
+    }
+
+}
